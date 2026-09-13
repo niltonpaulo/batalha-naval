@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Batalha Naval - Navio x Submarino</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; overflow: hidden;
+    background: #041019;
+    width: 100%; height: 100%;
+    touch-action: none;
+  }
+  #game-container {
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #rotate-msg {
+    position: fixed; inset: 0;
+    background: #041019; color: #cfe8ff;
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; text-align: center; font-family: sans-serif;
+    z-index: 999; padding: 20px;
+  }
+  @media (orientation: portrait) {
+    #rotate-msg { display: flex; }
+    #game-container { display: none; }
+  }
+  #fullscreen-btn {
+    position: fixed; top: 10px; right: 10px; z-index: 1000;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.5);
+    color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    font-family: sans-serif;
+  }
+</style>
+</head>
+<body>
+<div id="rotate-msg">
+  <div style="font-size:48px;">🔄</div>
+  <p>Gire o celular para o modo paisagem<br>para jogar</p>
+</div>
+<button id="fullscreen-btn" onclick="toggleFullscreen()">⛶</button>
+<div id="game-container"></div>
+<script>
+  function toggleFullscreen() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) {
+      if (el.requestFullscreen) el.requestFullscreen();
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+  }
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js"></script>
+<script>
+const GAME_W = 800;
+const GAME_H = 450;
+const WATER_Y = 225;
+const SHIP_Y = 205;
+const SUB_Y = 400;
+const WIN_SCORE = 5;
+
+class BattleScene extends Phaser.Scene {
+  constructor() { super('BattleScene'); }
+
+  create() {
+    // ---------- Sky ----------
+    this.add.rectangle(GAME_W/2, WATER_Y/2, GAME_W, WATER_Y, 0x8fd0f0);
+    for (let i=0;i<3;i++){
+      this.add.ellipse(120+i*260, 40+ (i%2)*20, 90, 30, 0xffffff, 0.85);
+    }
+
+    // ---------- Surface sea strip ----------
+    this.add.rectangle(GAME_W/2, WATER_Y + 25, GAME_W, 50, 0x2f7fb0);
+
+    // ---------- Deep sea ----------
+    const deepH = GAME_H - (WATER_Y+50);
+    this.deepSea = this.add.rectangle(GAME_W/2, WATER_Y+50+deepH/2, GAME_W, deepH, 0x08304a);
+
+    // ---------- Water line ----------
+    this.add.rectangle(GAME_W/2, WATER_Y, GAME_W, 3, 0xdff4ff, 0.9);
+
+    // ---------- Iceberg (decorative only) ----------
+    const iceX = GAME_W/2 + 40;
+    const iceberg = this.add.graphics();
+    iceberg.fillStyle(0xeaf7ff, 0.95);
+    iceberg.beginPath();
+    iceberg.moveTo(iceX-40, WATER_Y-25);
+    iceberg.lineTo(iceX+10, WATER_Y-55);
+    iceberg.lineTo(iceX+55, WATER_Y-20);
+    iceberg.lineTo(iceX+30, WATER_Y+10);
+    iceberg.lineTo(iceX-30, WATER_Y+10);
+    iceberg.closePath();
+    iceberg.fillPath();
+    iceberg.fillStyle(0xbfe4f5, 0.85);
+    iceberg.beginPath();
+    iceberg.moveTo(iceX-45, WATER_Y+10);
+    iceberg.lineTo(iceX-20, WATER_Y+90);
+    iceberg.lineTo(iceX+15, WATER_Y+140);
+    iceberg.lineTo(iceX+45, WATER_Y+70);
+    iceberg.lineTo(iceX+35, WATER_Y+10);
+    iceberg.closePath();
+    iceberg.fillPath();
+
+    // ---------- Water animation lines (deep sea) ----------
+    this.waterLines = [];
+    for (let i=0;i<4;i++){
+      const y = WATER_Y + 80 + i*45;
+      const l = this.add.rectangle(GAME_W/2, y, GAME_W, 2, 0x1c5a86, 0.4);
+      this.waterLines.push({obj:l, baseY:y, offset: Math.random()*1000});
+    }
+
+    // ---------- Player ship (top) ----------
+    this.ship = this.add.container(GAME_W/2 - 150, SHIP_Y);
+    const hull = this.add.rectangle(0,0,100,22,0x3a7d3a).setStrokeStyle(2,0x1f4d1f);
+    const cabin = this.add.rectangle(-15,-16,34,14,0x2a5c2a).setStrokeStyle(2,0x1f4d1f);
+    const mast = this.add.rectangle(10,-28,4,20,0x333333);
+    this.ship.add([hull,cabin,mast]);
+    this.shipSpeed = 1.5;
+    this.shipMinSpeed = -4;
+    this.shipMaxSpeed = 4;
+
+    // ---------- Enemy submarine (bottom) ----------
+    this.sub = this.add.container(GAME_W/2 + 150, SUB_Y);
+    const subHull = this.add.rectangle(0,0,110,26,0x555555).setStrokeStyle(2,0x222222);
+    const subTower = this.add.rectangle(-10,-18,26,16,0x3d3d3d).setStrokeStyle(2,0x222222);
+    this.sub.add([subHull, subTower]);
+    this.subSpeed = -1.2;
+    this.subNextSpeedChange = 0;
+
+    // ---------- Scores ----------
+    this.playerScore = 0;
+    this.enemyScore = 0;
+    this.scoreText = this.add.text(GAME_W/2, 16, '0  x  0', {
+      fontFamily:'sans-serif', fontSize:'26px', color:'#ffffff', fontStyle:'bold'
+    }).setOrigin(0.5,0);
+
+    this.add.text(GAME_W/2 - 90, 16, 'VOCÊ', {fontFamily:'sans-serif', fontSize:'13px', color:'#a8ffa8'}).setOrigin(0.5,0);
+    this.add.text(GAME_W/2 + 90, 16, 'INIMIGO', {fontFamily:'sans-serif', fontSize:'13px', color:'#ffb0b0'}).setOrigin(0.5,0);
+
+    // ---------- Missile in-flight flags ----------
+    this.playerMissile = null;
+    this.enemyMissile = null;
+    this.playerNextFireReady = true;
+    this.enemyNextFireTime = 1500;
+
+    // ---------- Bottom control bar ----------
+    const barY = GAME_H - 35;
+    this.add.rectangle(GAME_W/2, barY, GAME_W, 70, 0x102030, 0.9);
+
+    // Speed minus
+    this.btnMinus = this.makeButton(90, barY, '−', 0x3355aa);
+    this.btnMinus.on('pointerdown', () => {
+      this.shipSpeed = Math.max(this.shipMinSpeed, this.shipSpeed - 1);
+    });
+
+    // Speed display
+    this.speedText = this.add.text(160, barY, 'Velocidade: 1.5', {
+      fontFamily:'sans-serif', fontSize:'14px', color:'#dff4ff'
+    }).setOrigin(0,0.5);
+
+    // Speed plus
+    this.btnPlus = this.makeButton(330, barY, '+', 0x3355aa);
+    this.btnPlus.on('pointerdown', () => {
+      this.shipSpeed = Math.min(this.shipMaxSpeed, this.shipSpeed + 1);
+    });
+
+    // Pause
+    this.paused = false;
+    this.btnPause = this.makeButton(420, barY, '⏸', 0xaa8833);
+    this.btnPause.on('pointerdown', () => {
+      this.paused = !this.paused;
+      this.btnPause.label.setText(this.paused ? '▶' : '⏸');
+    });
+
+    // Fire
+    this.btnFire = this.add.circle(GAME_W - 70, barY, 32, 0xff5533, 0.9).setStrokeStyle(3,0xffffff).setInteractive();
+    this.add.text(GAME_W - 70, barY, 'FOGO', {fontFamily:'sans-serif', fontSize:'13px', color:'#fff', fontStyle:'bold'}).setOrigin(0.5);
+    this.btnFire.on('pointerdown', () => this.playerFire());
+
+    // ---------- Result overlay ----------
+    this.resultText = this.add.text(GAME_W/2, GAME_H/2 - 20, '', {
+      fontFamily:'sans-serif', fontSize:'40px', color:'#ffffff', fontStyle:'bold'
+    }).setOrigin(0.5).setDepth(10);
+    this.restartBtn = this.add.rectangle(GAME_W/2, GAME_H/2+40, 170, 50, 0x2196f3)
+      .setStrokeStyle(2,0xffffff).setInteractive().setVisible(false).setDepth(10);
+    this.restartText = this.add.text(GAME_W/2, GAME_H/2+40, 'JOGAR DE NOVO', {
+      fontFamily:'sans-serif', fontSize:'14px', color:'#fff', fontStyle:'bold'
+    }).setOrigin(0.5).setVisible(false).setDepth(11);
+    this.restartBtn.on('pointerdown', () => this.scene.restart());
+
+    this.gameOver = false;
+  }
+
+  makeButton(x, y, label, color) {
+    const circle = this.add.circle(x, y, 26, color, 0.9).setStrokeStyle(2, 0xffffff).setInteractive();
+    const text = this.add.text(x, y, label, {fontFamily:'sans-serif', fontSize:'22px', color:'#fff', fontStyle:'bold'}).setOrigin(0.5);
+    circle.label = text;
+    return circle;
+  }
+
+  playerFire() {
+    if (this.gameOver || this.playerMissile || this.paused) return;
+    const m = this.add.circle(this.ship.x, SHIP_Y + 14, 6, 0xff3333).setStrokeStyle(1,0x661111);
+    m.vy = 3.2;
+    this.playerMissile = m;
+  }
+
+  enemyFire() {
+    if (this.gameOver) return;
+    if (this.enemyMissile) return;
+    const m = this.add.circle(this.sub.x, SUB_Y - 14, 6, 0xffaa33).setStrokeStyle(1,0x664411);
+    m.vy = -3.2;
+    this.enemyMissile = m;
+  }
+
+  hitFlash(container) {
+    this.tweens.add({ targets: container, alpha: 0.2, duration: 60, yoyo: true, repeat: 2 });
+  }
+
+  endGame(playerWon) {
+    if (this.gameOver) return;
+    this.gameOver = true;
+    this.resultText.setText(playerWon ? 'VITÓRIA! 🏆' : 'DERROTA 💥');
+    this.resultText.setColor(playerWon ? '#8aff8a' : '#ff8a8a');
+    this.restartBtn.setVisible(true);
+    this.restartText.setVisible(true);
+  }
+
+  wrapX(obj) {
+    if (obj.x > GAME_W + 50) obj.x = -50;
+    if (obj.x < -50) obj.x = GAME_W + 50;
+  }
+
+  update(time, delta) {
+    this.waterLines.forEach(w => { w.obj.y = w.baseY + Math.sin((time + w.offset)/500)*3; });
+    this.speedText.setText('Velocidade: ' + this.shipSpeed.toFixed(1));
+
+    if (this.gameOver || this.paused) return;
+
+    const dt = delta / 16.67;
+
+    // ship movement
+    this.ship.x += this.shipSpeed * dt;
+    this.wrapX(this.ship);
+
+    // sub AI movement
+    if (time > this.subNextSpeedChange) {
+      this.subSpeed = Phaser.Math.FloatBetween(-3, 3);
+      this.subNextSpeedChange = time + Phaser.Math.Between(1200, 2500);
+    }
+    this.sub.x += this.subSpeed * dt;
+    this.wrapX(this.sub);
+
+    // enemy fire timing
+    if (time > this.enemyNextFireTime) {
+      this.enemyFire();
+      this.enemyNextFireTime = time + Phaser.Math.Between(1800, 3000);
+    }
+
+    // player missile travel
+    if (this.playerMissile) {
+      const m = this.playerMissile;
+      m.y += m.vy * dt;
+      if (m.y >= SUB_Y) {
+        if (Math.abs(m.x - this.sub.x) < 30) {
+          this.playerScore++;
+          this.scoreText.setText(this.playerScore + '  x  ' + this.enemyScore);
+          this.hitFlash(this.sub);
+          if (this.playerScore >= WIN_SCORE) this.endGame(true);
+        }
+        m.destroy();
+        this.playerMissile = null;
+      }
+    }
+
+    // enemy missile travel
+    if (this.enemyMissile) {
+      const m = this.enemyMissile;
+      m.y += m.vy * dt;
+      if (m.y <= SHIP_Y) {
+        if (Math.abs(m.x - this.ship.x) < 30) {
+          this.enemyScore++;
+          this.scoreText.setText(this.playerScore + '  x  ' + this.enemyScore);
+          this.hitFlash(this.ship);
+          if (this.enemyScore >= WIN_SCORE) this.endGame(false);
+        }
+        m.destroy();
+        this.enemyMissile = null;
+      }
+    }
+  }
+}
+
+const config = {
+  type: Phaser.AUTO,
+  width: GAME_W,
+  height: GAME_H,
+  parent: 'game-container',
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  backgroundColor: '#08304a',
+  scene: [BattleScene]
+};
+
+new Phaser.Game(config);
+</script>
+</body>
+</html>
