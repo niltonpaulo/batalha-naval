@@ -1,0 +1,58 @@
+{
+  "name": "aaa-android-game-dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "upgradePackages": true
+    },
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "epicgames.unreal-engine",
+        "ms-vscode-remote.remote-containers",
+        "ms-azuretools.vscode-docker",
+        "EditorConfig.EditorConfig"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "cmake.configureOnOpen": false,
+        "files.associations": {
+          "*.h": "cpp",
+          "*.cpp": "cpp",
+          "*.uproject": "json",
+          "*.ini": "ini"
+        }
+      }
+    }
+  },
+  "containerEnv": {
+    "ANDROID_HOME": "/opt/android-sdk",
+    "ANDROID_SDK_ROOT": "/opt/android-sdk",
+    "ANDROID_NDK_HOME": "/opt/android-sdk/ndk/26.3.11579264",
+    "ANDROID_NDK_ROOT": "/opt/android-sdk/ndk/26.3.11579264",
+    "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
+    "UE_ROOT": "/workspace/ue",
+    "UE_VERSION": "5.8.2-hotfix",
+    "UE_ANDROID_SDK_ROOT": "/opt/android-sdk",
+    "UE_ANDROID_NDK_VERSION": "26.3.11579264",
+    "UE_ANDROID_API_LEVEL": "35"
+  },
+  "runArgs": [
+    "--privileged",
+    "--gpus=all",
+    "--device=/dev/kvm",
+    "--shm-size=8g"
+  ],
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}"
+  },
+  "postCreateCommand": "chmod +x /workspace/Scripts/*.sh && /workspace/Scripts/check-android-toolchain.sh || true"
+}

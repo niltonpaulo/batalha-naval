@@ -1,0 +1,48 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "Games",
+  "Description": "AAA Android game development environment scaffold",
+  "Modules": [
+    {
+      "Name": "AaaAndroidGame",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "AdditionalDependencies": []
+    }
+  ],
+  "Targets": [
+    {
+      "Name": "AaaAndroidGameEditor",
+      "Type": "Editor",
+      "Platforms": [
+        "Win64",
+        "Linux"
+      ]
+    },
+    {
+      "Name": "AaaAndroidGame",
+      "Type": "Game",
+      "Platforms": [
+        "Android"
+      ]
+    }
+  ],
+  "Plugins": [],
+  "Platforms": [
+    {
+      "Name": "Android",
+      "Enabled": true,
+      "TargetArchitectures": [
+        "ARM64"
+      ],
+      "TargetGPUProfiles": [
+        "Vulkan_ES3_1_ANDROID",
+        "ES3_1_ANDROID"
+      ],
+      "MinSDKVersion": 26,
+      "TargetSDKVersion": 35,
+      "NDKVersion": "26.3.11579264"
+    }
+  ]
+}
